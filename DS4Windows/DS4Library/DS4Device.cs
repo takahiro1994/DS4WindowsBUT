@@ -212,6 +212,15 @@ namespace DS4Windows
         protected byte[] accel = new byte[6];
         protected byte[] gyro = new byte[6];
         protected byte[] inputReport;
+        
+        // Enhanced DS4v2 features
+        protected DS4ControllerVersion controllerVersion = DS4ControllerVersion.Unknown;
+        protected ControllerOptimizationSettings optimizationSettings;
+        protected BatteryManager batteryManager;
+        protected AdvancedLightbarEffects lightbarEffects;
+        protected HardwareHealthMonitor healthMonitor;
+        protected AdvancedMotionFilter motionFilter;
+        protected PerformanceAnalytics performanceAnalytics;
         protected byte[] btInputReport = null;
         protected byte[] outReportBuffer, outputReport;
         protected int inputReportErrorCount = 0; // Num of consequtive input report errors (fex if BT device fails 5 times in crc32 and 0x11 data type check then switch over to handle incoming BT packets as those were usb PC-friendly packets. Some fake DS4 gamepads needs this)
@@ -660,6 +669,9 @@ namespace DS4Windows
 
             touchpad = new DS4Touchpad();
             sixAxis = new DS4SixAxis();
+            
+            // Initialize enhanced DS4v2 features
+            InitializeEnhancedFeatures();
         }
 
         public virtual void PostInit()
@@ -1493,6 +1505,9 @@ namespace DS4Windows
                     if (fireReport && Report != null)
                         Report(this, EventArgs.Empty);
 
+                    // Update enhanced features
+                    UpdateEnhancedFeatures();
+
                     sendOutputReport(syncWriteReport, forceWrite);
                     forceWrite = false;
 
@@ -2123,6 +2138,188 @@ namespace DS4Windows
             {
                 PrepareOutputFeaturesByte();
             }
+        }
+
+        protected virtual void InitializeEnhancedFeatures()
+        {
+            // Detect controller version
+            controllerVersion = DS4v2Detection.DetectControllerVersion(this);
+            optimizationSettings = DS4v2Detection.GetOptimizedSettings(controllerVersion);
+            
+            // Initialize enhanced features
+            batteryManager = new BatteryManager(this);
+            lightbarEffects = new AdvancedLightbarEffects(this);
+            healthMonitor = new HardwareHealthMonitor(this);
+            motionFilter = new AdvancedMotionFilter(this);
+            performanceAnalytics = new PerformanceAnalytics(this);
+            
+            // Apply optimizations based on controller version
+            ApplyControllerOptimizations();
+            
+            // Set up event handlers
+            SetupEnhancedEventHandlers();
+        }
+
+        protected virtual void ApplyControllerOptimizations()
+        {
+            if (optimizationSettings == null) return;
+            
+            // Apply DS4v2 specific optimizations
+            if (optimizationSettings.SupportsAdvancedFeatures)
+            {
+                // Use faster polling rate for v2
+                if (conType == ConnectionType.BT)
+                {
+                    BTPollRate = Math.Max(0, Math.Min(16, optimizationSettings.OptimalBTPollRate));
+                }
+                
+                // Enable advanced lightbar effects for v2
+                if (optimizationSettings.HasImprovedLightbar)
+                {
+                    lightbarEffects?.AddEffect(AdvancedLightbarEffects.CreateBreathingEffect(
+                        System.Drawing.Color.Blue, priority: 0));
+                }
+            }
+        }
+
+        protected virtual void SetupEnhancedEventHandlers()
+        {
+            // Battery management events
+            if (batteryManager != null)
+            {
+                batteryManager.BatteryHealthChanged += OnBatteryHealthChanged;
+                batteryManager.LowBatteryWarning += OnLowBatteryWarning;
+            }
+            
+            // Hardware health events
+            if (healthMonitor != null)
+            {
+                healthMonitor.HealthStatusChanged += OnHealthStatusChanged;
+                healthMonitor.WearWarning += OnWearWarning;
+            }
+            
+            // Motion filter events
+            if (motionFilter != null)
+            {
+                motionFilter.GestureDetected += OnMotionGestureDetected;
+            }
+            
+            // Performance analytics events
+            if (performanceAnalytics != null)
+            {
+                performanceAnalytics.PerformanceAlert += OnPerformanceAlert;
+            }
+        }
+
+        protected virtual void OnBatteryHealthChanged(object sender, BatteryHealthChangedEventArgs e)
+        {
+            // Show battery health indicator on lightbar
+            if (lightbarEffects != null)
+            {
+                var healthColor = e.NewHealth switch
+                {
+                    BatteryHealth.Excellent => System.Drawing.Color.Green,
+                    BatteryHealth.Good => System.Drawing.Color.LightGreen,
+                    BatteryHealth.Fair => System.Drawing.Color.Yellow,
+                    BatteryHealth.Poor => System.Drawing.Color.Orange,
+                    BatteryHealth.VeryPoor => System.Drawing.Color.Red,
+                    _ => System.Drawing.Color.Blue
+                };
+                
+                lightbarEffects.AddEffect(AdvancedLightbarEffects.CreateNotificationFlash(
+                    healthColor, flashCount: 2, priority: 8));
+            }
+        }
+
+        protected virtual void OnLowBatteryWarning(object sender, LowBatteryEventArgs e)
+        {
+            // Flash lightbar for low battery
+            if (lightbarEffects != null)
+            {
+                var warningColor = e.WarningLevel switch
+                {
+                    BatteryWarningLevel.Critical => System.Drawing.Color.Red,
+                    BatteryWarningLevel.VeryLow => System.Drawing.Color.Orange,
+                    BatteryWarningLevel.Low => System.Drawing.Color.Yellow,
+                    _ => System.Drawing.Color.Yellow
+                };
+                
+                var flashCount = e.WarningLevel == BatteryWarningLevel.Critical ? 5 : 3;
+                lightbarEffects.AddEffect(AdvancedLightbarEffects.CreateNotificationFlash(
+                    warningColor, flashCount, priority: 10));
+            }
+        }
+
+        protected virtual void OnHealthStatusChanged(object sender, HealthStatusChangedEventArgs e)
+        {
+            // Log health status changes
+            AppLogger.LogToGui($"Controller {Mac} health status changed from {e.OldStatus} to {e.NewStatus}", false);
+            
+            // Show health indicator on lightbar
+            if (lightbarEffects != null && e.NewStatus == ControllerHealthStatus.Poor)
+            {
+                lightbarEffects.AddEffect(AdvancedLightbarEffects.CreateNotificationFlash(
+                    System.Drawing.Color.Orange, flashCount: 3, priority: 7));
+            }
+        }
+
+        protected virtual void OnWearWarning(object sender, WearWarningEventArgs e)
+        {
+            // Log wear warnings
+            AppLogger.LogToGui($"Controller {Mac} wear warning: {e.Message}", true);
+        }
+
+        protected virtual void OnMotionGestureDetected(object sender, MotionGestureDetectedEventArgs e)
+        {
+            // Handle detected motion gestures
+            AppLogger.LogToGui($"Motion gesture detected: {e.Gesture.Name}", false);
+            
+            // Example: Shake gesture to show battery level
+            if (e.Gesture.Name == "ShakeHorizontal" && lightbarEffects != null)
+            {
+                lightbarEffects.AddEffect(AdvancedLightbarEffects.CreateBatteryIndicatorEffect(
+                    battery, priority: 9));
+            }
+        }
+
+        protected virtual void OnPerformanceAlert(object sender, PerformanceAlertEventArgs e)
+        {
+            // Log performance alerts
+            if (e.Alert.Type == PerformanceAlertType.HighLatency)
+            {
+                AppLogger.LogToGui($"High latency detected on {Mac}: {e.Alert.Value:F1}ms", true);
+            }
+        }
+
+        // Public accessors for enhanced features
+        public DS4ControllerVersion ControllerVersion => controllerVersion;
+        public BatteryManager BatteryManager => batteryManager;
+        public AdvancedLightbarEffects LightbarEffects => lightbarEffects;
+        public HardwareHealthMonitor HealthMonitor => healthMonitor;
+        public AdvancedMotionFilter MotionFilter => motionFilter;
+        public PerformanceAnalytics PerformanceAnalytics => performanceAnalytics;
+
+        // Enhanced update methods
+        protected virtual void UpdateEnhancedFeatures()
+        {
+            // Update all enhanced features with current state
+            batteryManager?.UpdateBatteryStats();
+            healthMonitor?.UpdateHealthMonitoring(cState);
+            
+            if (motionFilter != null && sixAxis != null)
+            {
+                motionFilter.ProcessMotionData(sixAxis, DateTime.UtcNow);
+            }
+            
+            // Record performance metrics
+            performanceAnalytics?.RecordPacketData(inputReport?.Length ?? 0);
+        }
+
+        public virtual void DisposeEnhancedFeatures()
+        {
+            // Dispose enhanced features
+            lightbarEffects?.Dispose();
+            performanceAnalytics?.Dispose();
         }
     }
 }
