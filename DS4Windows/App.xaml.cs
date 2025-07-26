@@ -309,16 +309,39 @@ namespace DS4WinWPF
             bool result = true;
             try
             {
+                if (string.IsNullOrEmpty(DS4Windows.Global.appdatapath))
+                {
+                    Logger logger = logHolder?.Logger;
+                    logger?.Error("Cannot create config directory: appdatapath is null or empty");
+                    return false;
+                }
+
                 Directory.CreateDirectory(DS4Windows.Global.appdatapath);
                 Directory.CreateDirectory(DS4Windows.Global.appdatapath + @"\Profiles\");
                 Directory.CreateDirectory(DS4Windows.Global.appdatapath + @"\Logs\");
                 //Directory.CreateDirectory(DS4Windows.Global.appdatapath + @"\Macros\");
+                
+                Logger logger = logHolder?.Logger;
+                logger?.Info($"Configuration directory structure created at: {DS4Windows.Global.appdatapath}");
             }
-            catch (UnauthorizedAccessException)
+            catch (UnauthorizedAccessException ex)
             {
+                Logger logger = logHolder?.Logger;
+                logger?.Error($"Access denied creating config directories: {ex.Message}");
                 result = false;
             }
-
+            catch (IOException ex)
+            {
+                Logger logger = logHolder?.Logger;
+                logger?.Error($"IO error creating config directories: {ex.Message}");
+                result = false;
+            }
+            catch (Exception ex)
+            {
+                Logger logger = logHolder?.Logger;
+                logger?.Error($"Unexpected error creating config directories: {ex.Message}");
+                result = false;
+            }
 
             return result;
         }
@@ -333,17 +356,57 @@ namespace DS4WinWPF
                     try
                     {
                         Directory.CreateDirectory(DS4Windows.Global.appDataPpath);
-                        File.Copy(DS4Windows.Global.exedirpath + "\\Profiles.xml",
-                            DS4Windows.Global.appDataPpath + "\\Profiles.xml");
-                        File.Copy(DS4Windows.Global.exedirpath + "\\Auto Profiles.xml",
-                            DS4Windows.Global.appDataPpath + "\\Auto Profiles.xml");
-                        Directory.CreateDirectory(DS4Windows.Global.appDataPpath + "\\Profiles");
-                        foreach (string s in Directory.GetFiles(DS4Windows.Global.exedirpath + "\\Profiles"))
+                        
+                        string sourceProfilesXml = DS4Windows.Global.exedirpath + "\\Profiles.xml";
+                        string destProfilesXml = DS4Windows.Global.appDataPpath + "\\Profiles.xml";
+                        if (File.Exists(sourceProfilesXml))
                         {
-                            File.Copy(s, DS4Windows.Global.appDataPpath + "\\Profiles\\" + Path.GetFileName(s));
+                            File.Copy(sourceProfilesXml, destProfilesXml, true);
                         }
+                        
+                        string sourceAutoProfilesXml = DS4Windows.Global.exedirpath + "\\Auto Profiles.xml";
+                        string destAutoProfilesXml = DS4Windows.Global.appDataPpath + "\\Auto Profiles.xml";
+                        if (File.Exists(sourceAutoProfilesXml))
+                        {
+                            File.Copy(sourceAutoProfilesXml, destAutoProfilesXml, true);
+                        }
+                        
+                        Directory.CreateDirectory(DS4Windows.Global.appDataPpath + "\\Profiles");
+                        string sourceProfilesDir = DS4Windows.Global.exedirpath + "\\Profiles";
+                        if (Directory.Exists(sourceProfilesDir))
+                        {
+                            foreach (string s in Directory.GetFiles(sourceProfilesDir))
+                            {
+                                string fileName = Path.GetFileName(s);
+                                string destPath = DS4Windows.Global.appDataPpath + "\\Profiles\\" + fileName;
+                                File.Copy(s, destPath, true);
+                            }
+                        }
+                        
+                        Logger logger = logHolder?.Logger;
+                        logger?.Info("Settings copied to appdata successfully");
                     }
-                    catch { }
+                    catch (UnauthorizedAccessException ex)
+                    {
+                        Logger logger = logHolder?.Logger;
+                        logger?.Error($"Access denied copying settings to appdata: {ex.Message}");
+                        MessageBox.Show($"Access denied copying settings: {ex.Message}", "DS4Windows", 
+                            MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
+                    catch (IOException ex)
+                    {
+                        Logger logger = logHolder?.Logger;
+                        logger?.Error($"IO error copying settings to appdata: {ex.Message}");
+                        MessageBox.Show($"IO error copying settings: {ex.Message}", "DS4Windows", 
+                            MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger logger = logHolder?.Logger;
+                        logger?.Error($"Unexpected error copying settings to appdata: {ex.Message}");
+                        MessageBox.Show($"Unexpected error copying settings: {ex.Message}", "DS4Windows", 
+                            MessageBoxButton.OK, MessageBoxImage.Error);
+                    }
                     MessageBox.Show("Copy complete, please relaunch DS4Windows and remove settings from Program Directory",
                         "DS4Windows");
                 }

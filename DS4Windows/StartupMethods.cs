@@ -46,41 +46,87 @@ namespace DS4WinWPF
 
         public static void WriteStartProgEntry()
         {
-            Type t = Type.GetTypeFromCLSID(new Guid("72C24DD5-D70A-438B-8A42-98424B88AFB8")); // Windows Script Host Shell Object
-            dynamic shell = Activator.CreateInstance(t);
+            if (string.IsNullOrEmpty(DS4Windows.Global.exelocation) || !File.Exists(DS4Windows.Global.exelocation))
+            {
+                DS4Windows.AppLogger.LogToGui("Cannot create startup entry: Invalid executable location", true);
+                return;
+            }
+
             try
             {
-                var lnk = shell.CreateShortcut(lnkpath);
+                Type t = Type.GetTypeFromCLSID(new Guid("72C24DD5-D70A-438B-8A42-98424B88AFB8")); // Windows Script Host Shell Object
+                dynamic shell = Activator.CreateInstance(t);
                 try
                 {
-                    string app = DS4Windows.Global.exelocation;
-                    lnk.TargetPath = DS4Windows.Global.exelocation;
-                    lnk.Arguments = "-m";
-                    // Need to add the DS4Windows directory as cwd or
-                    // language assemblies cannot be discovered
-                    lnk.WorkingDirectory = DS4Windows.Global.exedirpath;
+                    var lnk = shell.CreateShortcut(lnkpath);
+                    try
+                    {
+                        string app = DS4Windows.Global.exelocation;
+                        lnk.TargetPath = DS4Windows.Global.exelocation;
+                        lnk.Arguments = "-m";
+                        // Need to add the DS4Windows directory as cwd or
+                        // language assemblies cannot be discovered
+                        lnk.WorkingDirectory = DS4Windows.Global.exedirpath;
 
-                    //lnk.TargetPath = Assembly.GetExecutingAssembly().Location;
-                    //lnk.Arguments = "-m";
-                    lnk.IconLocation = app.Replace('\\', '/');
-                    lnk.Save();
+                        //lnk.TargetPath = Assembly.GetExecutingAssembly().Location;
+                        //lnk.Arguments = "-m";
+                        lnk.IconLocation = app.Replace('\\', '/');
+                        lnk.Save();
+                        
+                        DS4Windows.AppLogger.LogToGui("Startup shortcut created successfully", false);
+                    }
+                    finally
+                    {
+                        Marshal.FinalReleaseComObject(lnk);
+                    }
                 }
                 finally
                 {
-                    Marshal.FinalReleaseComObject(lnk);
+                    Marshal.FinalReleaseComObject(shell);
                 }
             }
-            finally
+            catch (UnauthorizedAccessException ex)
             {
-                Marshal.FinalReleaseComObject(shell);
+                DS4Windows.AppLogger.LogToGui($"Access denied creating startup entry: {ex.Message}", true);
+            }
+            catch (COMException ex)
+            {
+                DS4Windows.AppLogger.LogToGui($"COM error creating startup entry: {ex.Message}", true);
+            }
+            catch (Exception ex)
+            {
+                DS4Windows.AppLogger.LogToGui($"Unexpected error creating startup entry: {ex.Message}", true);
             }
         }
 
         public static void DeleteStartProgEntry()
         {
-            if (File.Exists(lnkpath) && !new FileInfo(lnkpath).IsReadOnly)
+            try
             {
-                File.Delete(lnkpath);
+                if (File.Exists(lnkpath))
+                {
+                    FileInfo fileInfo = new FileInfo(lnkpath);
+                    if (fileInfo.IsReadOnly)
+                    {
+                        DS4Windows.AppLogger.LogToGui("Cannot delete startup entry: File is read-only", true);
+                        return;
+                    }
+                    
+                    File.Delete(lnkpath);
+                    DS4Windows.AppLogger.LogToGui("Startup shortcut removed successfully", false);
+                }
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                DS4Windows.AppLogger.LogToGui($"Access denied deleting startup entry: {ex.Message}", true);
+            }
+            catch (IOException ex)
+            {
+                DS4Windows.AppLogger.LogToGui($"IO error deleting startup entry: {ex.Message}", true);
+            }
+            catch (Exception ex)
+            {
+                DS4Windows.AppLogger.LogToGui($"Unexpected error deleting startup entry: {ex.Message}", true);
             }
         }
 
@@ -118,24 +164,47 @@ namespace DS4WinWPF
 
         public static void WriteTaskEntry()
         {
-            DeleteTaskEntry();
+            try
+            {
+                DeleteTaskEntry();
 
-            // Create new version of task.bat file using current exe
-            // filename. Allow dynamic file
-            RefreshTaskBat();
+                // Create new version of task.bat file using current exe
+                // filename. Allow dynamic file
+                if (!RefreshTaskBat())
+                {
+                    DS4Windows.AppLogger.LogToGui("Failed to create task batch file", true);
+                    return;
+                }
 
-            TaskService ts = new TaskService();
-            TaskDefinition td = ts.NewTask();
-            td.Triggers.Add(new LogonTrigger());
-            string dir = DS4Windows.Global.exedirpath;
-            td.Actions.Add(new ExecAction($@"{dir}\task.bat",
-                "",
-                dir));
+                using (TaskService ts = new TaskService())
+                {
+                    TaskDefinition td = ts.NewTask();
+                    td.Triggers.Add(new LogonTrigger());
+                    string dir = DS4Windows.Global.exedirpath;
+                    td.Actions.Add(new ExecAction($@"{dir}\task.bat",
+                        "",
+                        dir));
 
-            td.Principal.RunLevel = TaskRunLevel.Highest;
-            td.Settings.StopIfGoingOnBatteries = false;
-            td.Settings.DisallowStartIfOnBatteries = false;
-            ts.RootFolder.RegisterTaskDefinition("RunDS4Windows", td);
+                    td.Principal.RunLevel = TaskRunLevel.Highest;
+                    td.Settings.StopIfGoingOnBatteries = false;
+                    td.Settings.DisallowStartIfOnBatteries = false;
+                    ts.RootFolder.RegisterTaskDefinition("RunDS4Windows", td);
+                    
+                    DS4Windows.AppLogger.LogToGui("Startup task created successfully", false);
+                }
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                DS4Windows.AppLogger.LogToGui($"Access denied creating startup task: {ex.Message}", true);
+            }
+            catch (System.Runtime.InteropServices.COMException ex)
+            {
+                DS4Windows.AppLogger.LogToGui($"Task Scheduler COM error: {ex.Message}", true);
+            }
+            catch (Exception ex)
+            {
+                DS4Windows.AppLogger.LogToGui($"Unexpected error creating startup task: {ex.Message}", true);
+            }
         }
 
         public static void DeleteTaskEntry()
@@ -189,19 +258,44 @@ namespace DS4WinWPF
             return result;
         }
 
-        private static void RefreshTaskBat()
+        private static bool RefreshTaskBat()
         {
-            string dir = DS4Windows.Global.exedirpath;
-            string path = $@"{dir}\task.bat";
-            FileStream fileStream = new FileStream(path, FileMode.Create, FileAccess.Write);
-            using (StreamWriter w = new StreamWriter(fileStream))
+            try
             {
-                string temp = string.Empty;
-                w.WriteLine("@echo off"); // Turn off echo
-                w.WriteLine("SET mypath=\"%~dp0\"");
-                temp = $"cmd.exe /c start \"RunDS4Windows\" %mypath%\\{DS4Windows.Global.exeFileName} -m";
-                w.WriteLine(temp);
-                w.WriteLine("exit");
+                string dir = DS4Windows.Global.exedirpath;
+                if (string.IsNullOrEmpty(dir) || !Directory.Exists(dir))
+                {
+                    DS4Windows.AppLogger.LogToGui("Cannot create task batch file: Invalid directory", true);
+                    return false;
+                }
+
+                string path = $@"{dir}\task.bat";
+                using (FileStream fileStream = new FileStream(path, FileMode.Create, FileAccess.Write))
+                using (StreamWriter w = new StreamWriter(fileStream))
+                {
+                    w.WriteLine("@echo off"); // Turn off echo
+                    w.WriteLine("SET mypath=\"%~dp0\"");
+                    string temp = $"cmd.exe /c start \"RunDS4Windows\" %mypath%\\{DS4Windows.Global.exeFileName} -m";
+                    w.WriteLine(temp);
+                    w.WriteLine("exit");
+                }
+                
+                return true;
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                DS4Windows.AppLogger.LogToGui($"Access denied creating task batch file: {ex.Message}", true);
+                return false;
+            }
+            catch (IOException ex)
+            {
+                DS4Windows.AppLogger.LogToGui($"IO error creating task batch file: {ex.Message}", true);
+                return false;
+            }
+            catch (Exception ex)
+            {
+                DS4Windows.AppLogger.LogToGui($"Unexpected error creating task batch file: {ex.Message}", true);
+                return false;
             }
         }
     }

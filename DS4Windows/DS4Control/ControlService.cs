@@ -282,50 +282,80 @@ namespace DS4Windows
         {
             oscCallback = delegate (OscPacket packet)
             {
-                var messageReceived = (OscMessage)packet;
-
-                // If typecase fails, exit
-                if (messageReceived == null)
-                {
-                    return;
-                }
-
-                string[] command = null;
                 try
                 {
-                    command = messageReceived.Address.Split("/");
-                }
-                catch (Exception e)
-                {
-                    AppLogger.LogToGui("Error Receiving OSC Message: " + e.Message, false, true);
-                }
+                    var messageReceived = (OscMessage)packet;
 
-                if (command == null)
-                {
-                    return;
-                }
-
-                if (command[1] != "ds4windows")
-                {
-                    return;
-                }
-
-                if (command[2] == "monitor")
-                {
-                    if (Global.isInterpretingOscMonitoring())
+                    // If typecast fails, exit
+                    if (messageReceived == null)
                     {
-                        command = MapMonitoringOscMessageToCommand(command);
+                        LogDebug("OSC Callback: Received null message packet", true);
+                        return;
                     }
-                    else
+
+                    if (string.IsNullOrEmpty(messageReceived.Address))
                     {
+                        LogDebug("OSC Callback: Received message with empty address", true);
+                        return;
+                    }
+
+                    string[] command = null;
+                    try
+                    {
+                        command = messageReceived.Address.Split("/");
+                    }
+                    catch (Exception e)
+                    {
+                        AppLogger.LogToGui($"Error parsing OSC message address '{messageReceived.Address}': {e.Message}", true, true);
+                        return;
+                    }
+
+                    if (command == null || command.Length < 3)
+                    {
+                        LogDebug($"OSC Callback: Invalid command structure in address '{messageReceived.Address}'", true);
+                        return;
+                    }
+
+                    if (command[1] != "ds4windows")
+                    {
+                        LogDebug($"OSC Callback: Message not for ds4windows: '{command[1]}'", false);
+                        return;
+                    }
+
+                    if (command[2] == "monitor")
+                    {
+                        if (Global.isInterpretingOscMonitoring())
+                        {
+                            if (command.Length < 5)
+                            {
+                                LogDebug("OSC Callback: Monitor command requires at least 5 parts", true);
+                                return;
+                            }
+                            command = MapMonitoringOscMessageToCommand(command);
+                        }
+                        else
+                        {
+                            return;
+                        }
+                    }
+
+                    int stateInd = -1;
+                    if (!int.TryParse(command[2], out stateInd))
+                    {
+                        LogDebug($"OSC Callback: Could not parse controller index '{command[2]}'", true);
+                        stateInd = -1;
+                    }
+
+                    if (stateInd < 0 || stateInd >= MAX_DS4_CONTROLLER_COUNT)
+                    {
+                        LogDebug($"OSC Callback: Controller index {stateInd} out of range (0-{MAX_DS4_CONTROLLER_COUNT - 1})", true);
                         return;
                     }
                 }
-
-                int stateInd = -1;
-                if (!int.TryParse(command[2], out stateInd))
+                catch (Exception ex)
                 {
-                    stateInd = -1;
+                    AppLogger.LogToGui($"Unexpected error in OSC callback: {ex.Message}", true);
+                    LogDebug($"OSC Callback exception: {ex}", true);
                 }
 
                 if (stateInd == -1)
@@ -3016,25 +3046,44 @@ namespace DS4Windows
 
         private void LagFlashWarning(DS4Device device, int ind, bool on)
         {
-            if (on)
+            if (device == null)
             {
-                lag[ind] = true;
-                LogDebug(string.Format(DS4WinWPF.Properties.Resources.LatencyOverTen, (ind + 1), device.Latency), true);
-                if (getFlashWhenLate())
+                LogDebug($"LagFlashWarning: Device is null for controller {ind + 1}", true);
+                return;
+            }
+
+            if (ind < 0 || ind >= MAX_DS4_CONTROLLER_COUNT)
+            {
+                LogDebug($"LagFlashWarning: Controller index {ind} out of range", true);
+                return;
+            }
+
+            try
+            {
+                if (on)
                 {
-                    DS4Color color = new DS4Color { red = 50, green = 0, blue = 0 };
-                    DS4LightBar.forcedColor[ind] = color;
-                    DS4LightBar.forcedFlash[ind] = 2;
-                    DS4LightBar.forcelight[ind] = true;
+                    lag[ind] = true;
+                    LogDebug(string.Format(DS4WinWPF.Properties.Resources.LatencyOverTen, (ind + 1), device.Latency), true);
+                    if (getFlashWhenLate())
+                    {
+                        DS4Color color = new DS4Color { red = 50, green = 0, blue = 0 };
+                        DS4LightBar.forcedColor[ind] = color;
+                        DS4LightBar.forcedFlash[ind] = 2;
+                        DS4LightBar.forcelight[ind] = true;
+                    }
+                }
+                else
+                {
+                    lag[ind] = false;
+                    LogDebug(DS4WinWPF.Properties.Resources.LatencyNotOverTen.Replace("*number*", (ind + 1).ToString()));
+                    DS4LightBar.forcelight[ind] = false;
+                    DS4LightBar.forcedFlash[ind] = 0;
+                    device.LightBarColor = getMainColor(ind);
                 }
             }
-            else
+            catch (Exception ex)
             {
-                lag[ind] = false;
-                LogDebug(DS4WinWPF.Properties.Resources.LatencyNotOverTen.Replace("*number*", (ind + 1).ToString()));
-                DS4LightBar.forcelight[ind] = false;
-                DS4LightBar.forcedFlash[ind] = 0;
-                device.LightBarColor = getMainColor(ind);
+                LogDebug($"Error in LagFlashWarning for controller {ind + 1}: {ex.Message}", true);
             }
         }
 

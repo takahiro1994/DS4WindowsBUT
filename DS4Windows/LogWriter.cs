@@ -34,22 +34,62 @@ namespace DS4WinWPF
 
         public void Process()
         {
+            if (string.IsNullOrWhiteSpace(filename))
+            {
+                DS4Windows.AppLogger.LogToGui("LogWriter: Invalid filename provided", true);
+                return;
+            }
+
+            if (logCol == null || logCol.Count == 0)
+            {
+                DS4Windows.AppLogger.LogToGui("LogWriter: No log items to write", false);
+                return;
+            }
+
             List<string> outputLines = new List<string>();
             foreach(LogItem item in logCol)
             {
-                outputLines.Add($"{item.Datetime}: {item.Message}");
+                if (item != null)
+                {
+                    outputLines.Add($"{item.Datetime}: {item.Message}");
+                }
             }
 
             try
             {
-                StreamWriter stream = new StreamWriter(filename);
-                foreach(string line in outputLines)
+                // Ensure directory exists
+                string directory = Path.GetDirectoryName(filename);
+                if (!string.IsNullOrEmpty(directory) && !Directory.Exists(directory))
                 {
-                    stream.WriteLine(line);
+                    Directory.CreateDirectory(directory);
                 }
-                stream.Close();
+
+                using (StreamWriter stream = new StreamWriter(filename, false, System.Text.Encoding.UTF8))
+                {
+                    foreach(string line in outputLines)
+                    {
+                        stream.WriteLine(line);
+                    }
+                }
+
+                DS4Windows.AppLogger.LogToGui($"Log exported successfully to: {filename}", false);
             }
-            catch { }
+            catch (UnauthorizedAccessException ex)
+            {
+                DS4Windows.AppLogger.LogToGui($"LogWriter: Access denied writing to {filename}. {ex.Message}", true);
+            }
+            catch (DirectoryNotFoundException ex)
+            {
+                DS4Windows.AppLogger.LogToGui($"LogWriter: Directory not found for {filename}. {ex.Message}", true);
+            }
+            catch (IOException ex)
+            {
+                DS4Windows.AppLogger.LogToGui($"LogWriter: IO error writing to {filename}. {ex.Message}", true);
+            }
+            catch (Exception ex)
+            {
+                DS4Windows.AppLogger.LogToGui($"LogWriter: Unexpected error writing to {filename}. {ex.Message}", true);
+            }
         }
     }
 }
