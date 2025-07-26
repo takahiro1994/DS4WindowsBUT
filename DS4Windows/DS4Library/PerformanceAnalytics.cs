@@ -49,6 +49,9 @@ namespace DS4Windows
         public double LatencyStandardDeviation { get; set; }
         public double AverageThroughputPPS { get; set; }
         public double PacketLossPercentage { get; set; }
+        public double PacketLossRate { get; set; }
+        public double ConnectionStability { get; set; }
+        public double OverallHealthScore { get; set; }
         public int TotalInputEvents { get; set; }
         public TimeSpan MonitoringDuration { get; set; }
         public Dictionary<string, double> InputTypeLatencies { get; set; } = new Dictionary<string, double>();

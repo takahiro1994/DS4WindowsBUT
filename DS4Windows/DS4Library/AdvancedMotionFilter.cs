@@ -40,6 +40,7 @@ namespace DS4Windows
         public TimeSpan TimeWindow { get; set; }
         public double Threshold { get; set; }
         public Action<MotionGesture> OnDetected { get; set; }
+        public string AssignedAction { get; set; }
     }
 
     public class MotionPattern
@@ -155,7 +156,7 @@ namespace DS4Windows
         /// <summary>
         /// Processes motion data with advanced filtering
         /// </summary>
-        public MotionSample ProcessMotionData(DS4SixAxis sixAxis, DateTime timestamp)
+        public MotionSample ProcessMotionData(SixAxis sixAxis, DateTime timestamp)
         {
             if (sixAxis == null) return null;
 
