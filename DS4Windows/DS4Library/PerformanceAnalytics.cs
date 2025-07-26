@@ -515,4 +515,16 @@ namespace DS4Windows
             Metrics = metrics;
         }
     }
+
+    public class PerformanceDashboard
+    {
+        public double AverageLatencyMs { get; set; }
+        public double CurrentCpuUsage { get; set; }
+        public double MemoryUsageMB { get; set; }
+        public int PacketsPerSecond { get; set; }
+        public double PacketLossRate { get; set; }
+        public int ActiveControllers { get; set; }
+        public List<PerformanceAlert> RecentAlerts { get; set; } = new List<PerformanceAlert>();
+        public DateTime LastUpdated { get; set; } = DateTime.UtcNow;
+    }
 }

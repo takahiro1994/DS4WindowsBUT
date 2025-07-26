@@ -19,6 +19,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Sensorit.Base;
 
 namespace DS4Windows
 {
@@ -74,8 +75,8 @@ namespace DS4Windows
         private double adaptiveGain = 0.1;
         
         // OneEuro filter parameters
-        private OneEuroFilter3D gyroFilter;
-        private OneEuroFilter3D accelFilter;
+        private AdvancedOneEuroFilter3D gyroFilter;
+        private AdvancedOneEuroFilter3D accelFilter;
         
         // Kalman filter state
         private KalmanFilter3D kalmanGyro;
@@ -102,8 +103,8 @@ namespace DS4Windows
         private void InitializeFilters()
         {
             // Initialize OneEuro filters with optimized parameters for DS4v2
-            gyroFilter = new OneEuroFilter3D();
-            accelFilter = new OneEuroFilter3D();
+            gyroFilter = new AdvancedOneEuroFilter3D();
+            accelFilter = new AdvancedOneEuroFilter3D();
             
             // Initialize Kalman filters
             kalmanGyro = new KalmanFilter3D();
@@ -434,11 +435,11 @@ namespace DS4Windows
     }
 
     // Helper classes
-    public class OneEuroFilter3D
+    public class AdvancedOneEuroFilter3D
     {
-        private OneEuroFilter filterX = new OneEuroFilter(1.0, 0.1, 1.0, 1.0);
-        private OneEuroFilter filterY = new OneEuroFilter(1.0, 0.1, 1.0, 1.0);
-        private OneEuroFilter filterZ = new OneEuroFilter(1.0, 0.1, 1.0, 1.0);
+        private OneEuroFilter filterX = new OneEuroFilter(1.0, 0.1);
+        private OneEuroFilter filterY = new OneEuroFilter(1.0, 0.1);
+        private OneEuroFilter filterZ = new OneEuroFilter(1.0, 0.1);
 
         public (double X, double Y, double Z) Filter(double x, double y, double z, double deltaTime)
         {
