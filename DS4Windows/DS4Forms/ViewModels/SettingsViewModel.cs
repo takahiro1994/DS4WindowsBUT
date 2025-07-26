@@ -138,7 +138,19 @@ namespace DS4WinWPF.DS4Forms.ViewModels
 
         public bool DisconnectBTStop { get => DS4Windows.Global.DCBTatStop; set => DS4Windows.Global.DCBTatStop = value; }
         public bool FlashHighLatency { get => DS4Windows.Global.FlashWhenLate; set => DS4Windows.Global.FlashWhenLate = value; }
-        public int FlashHighLatencyAt { get => DS4Windows.Global.FlashWhenLateAt; set => DS4Windows.Global.FlashWhenLateAt = value; }
+        public int FlashHighLatencyAt 
+        { 
+            get => DS4Windows.Global.FlashWhenLateAt; 
+            set 
+            {
+                if (value < 1 || value > 9999)
+                {
+                    DS4Windows.AppLogger.LogToGui($"Invalid flash latency threshold: {value}ms. Must be between 1-9999ms", true);
+                    return;
+                }
+                DS4Windows.Global.FlashWhenLateAt = value; 
+            } 
+        }
         public bool StartMinimize { get => DS4Windows.Global.StartMinimized; set => DS4Windows.Global.StartMinimized = value; }
         public bool MinimizeToTaskbar { get => DS4Windows.Global.MinToTaskbar; set => DS4Windows.Global.MinToTaskbar = value; }
         public bool CloseMinimizes { get => DS4Windows.Global.CloseMini; set => DS4Windows.Global.CloseMini = value; }
@@ -244,7 +256,19 @@ namespace DS4WinWPF.DS4Forms.ViewModels
             }
         }
         public event EventHandler UseOSCServerChanged;
-        public int OscPort { get => DS4Windows.Global.getOSCServerPortNum(); set => DS4Windows.Global.setOSCServerPort(value); }
+        public int OscPort 
+        { 
+            get => DS4Windows.Global.getOSCServerPortNum(); 
+            set 
+            {
+                if (value < 1024 || value > 65535)
+                {
+                    DS4Windows.AppLogger.LogToGui($"Invalid OSC port number: {value}. Must be between 1024-65535", true);
+                    return;
+                }
+                DS4Windows.Global.setOSCServerPort(value); 
+            } 
+        }
         
         public bool InterpretingOscMonitoring { get => DS4Windows.Global.isInterpretingOscMonitoring(); set => DS4Windows.Global.setInterpretingOscMonitoring(value); }
 
@@ -259,7 +283,19 @@ namespace DS4WinWPF.DS4Forms.ViewModels
             }
         }
         public event EventHandler UseOSCSenderChanged;
-        public int OscSendPort { get => DS4Windows.Global.getOSCSenderPortNum(); set => DS4Windows.Global.setOSCSenderPort(value); }
+        public int OscSendPort 
+        { 
+            get => DS4Windows.Global.getOSCSenderPortNum(); 
+            set 
+            {
+                if (value < 1024 || value > 65535)
+                {
+                    DS4Windows.AppLogger.LogToGui($"Invalid OSC send port number: {value}. Must be between 1024-65535", true);
+                    return;
+                }
+                DS4Windows.Global.setOSCSenderPort(value); 
+            } 
+        }
 
         public string OscSenderAddress
         {
@@ -282,7 +318,19 @@ namespace DS4WinWPF.DS4Forms.ViewModels
 
         public string UdpIpAddress { get => DS4Windows.Global.getUDPServerListenAddress();
             set => DS4Windows.Global.setUDPServerListenAddress(value); }
-        public int UdpPort { get => DS4Windows.Global.getUDPServerPortNum(); set => DS4Windows.Global.setUDPServerPort(value); }
+        public int UdpPort 
+        { 
+            get => DS4Windows.Global.getUDPServerPortNum(); 
+            set 
+            {
+                if (value < 1024 || value > 65535)
+                {
+                    DS4Windows.AppLogger.LogToGui($"Invalid UDP port number: {value}. Must be between 1024-65535", true);
+                    return;
+                }
+                DS4Windows.Global.setUDPServerPort(value); 
+            } 
+        }
 
         public bool UseUdpSmoothing
         {
@@ -347,9 +395,27 @@ namespace DS4WinWPF.DS4Forms.ViewModels
             {
                 string temp = DS4Windows.Global.CustomSteamFolder;
                 if (temp == value) return;
-                if (Directory.Exists(value) || value == string.Empty)
+                
+                if (string.IsNullOrEmpty(value))
                 {
                     DS4Windows.Global.CustomSteamFolder = value;
+                    return;
+                }
+                
+                try
+                {
+                    if (Directory.Exists(value))
+                    {
+                        DS4Windows.Global.CustomSteamFolder = value;
+                    }
+                    else
+                    {
+                        DS4Windows.AppLogger.LogToGui($"Custom Steam folder does not exist: {value}", true);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    DS4Windows.AppLogger.LogToGui($"Error validating Steam folder path: {ex.Message}", true);
                 }
             }
         }
@@ -645,18 +711,69 @@ namespace DS4WinWPF.DS4Forms.ViewModels
 
         public void CreateFakeExe(string filename)
         {
-            string exefile = Path.Combine(DS4Windows.Global.exedirpath, $"{filename}.exe");
-            string current_conf_file_path = $"{DS4Windows.Global.exelocation}.runtimeconfig.json";
-            string current_deps_file_path = $"{DS4Windows.Global.exelocation}.deps.json";
+            if (string.IsNullOrWhiteSpace(filename))
+            {
+                DS4Windows.AppLogger.LogToGui("Cannot create fake exe: Invalid filename provided", true);
+                return;
+            }
 
-            string fake_conf_file = Path.Combine(DS4Windows.Global.exedirpath, $"{filename}.runtimeconfig.json");
-            string fake_deps_file = Path.Combine(DS4Windows.Global.exedirpath, $"{filename}.deps.json");
+            // Validate filename for invalid characters
+            char[] invalidChars = Path.GetInvalidFileNameChars();
+            if (filename.IndexOfAny(invalidChars) >= 0)
+            {
+                DS4Windows.AppLogger.LogToGui("Cannot create fake exe: Filename contains invalid characters", true);
+                return;
+            }
 
-            File.Copy(DS4Windows.Global.exelocation, exefile); // Copy exe
+            try
+            {
+                string exefile = Path.Combine(DS4Windows.Global.exedirpath, $"{filename}.exe");
+                string current_conf_file_path = $"{DS4Windows.Global.exelocation}.runtimeconfig.json";
+                string current_deps_file_path = $"{DS4Windows.Global.exelocation}.deps.json";
 
-            // Copy needed app config and deps files
-            File.Copy(current_conf_file_path, fake_conf_file);
-            File.Copy(current_deps_file_path, fake_deps_file);
+                string fake_conf_file = Path.Combine(DS4Windows.Global.exedirpath, $"{filename}.runtimeconfig.json");
+                string fake_deps_file = Path.Combine(DS4Windows.Global.exedirpath, $"{filename}.deps.json");
+
+                // Verify source files exist
+                if (!File.Exists(DS4Windows.Global.exelocation))
+                {
+                    DS4Windows.AppLogger.LogToGui("Cannot create fake exe: Source executable not found", true);
+                    return;
+                }
+
+                if (!File.Exists(current_conf_file_path))
+                {
+                    DS4Windows.AppLogger.LogToGui("Cannot create fake exe: Source runtime config not found", true);
+                    return;
+                }
+
+                if (!File.Exists(current_deps_file_path))
+                {
+                    DS4Windows.AppLogger.LogToGui("Cannot create fake exe: Source deps file not found", true);
+                    return;
+                }
+
+                // Copy executable
+                File.Copy(DS4Windows.Global.exelocation, exefile, true);
+
+                // Copy needed app config and deps files
+                File.Copy(current_conf_file_path, fake_conf_file, true);
+                File.Copy(current_deps_file_path, fake_deps_file, true);
+
+                DS4Windows.AppLogger.LogToGui($"Fake executable created successfully: {filename}.exe", false);
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                DS4Windows.AppLogger.LogToGui($"Access denied creating fake exe: {ex.Message}", true);
+            }
+            catch (IOException ex)
+            {
+                DS4Windows.AppLogger.LogToGui($"IO error creating fake exe: {ex.Message}", true);
+            }
+            catch (Exception ex)
+            {
+                DS4Windows.AppLogger.LogToGui($"Unexpected error creating fake exe: {ex.Message}", true);
+            }
         }
 
         public void DriverCheckRefresh()
