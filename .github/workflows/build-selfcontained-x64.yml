@@ -1,8 +1,8 @@
 name: Build self-contained x64 single-file
 
 on:
-  workflow_dispatch: {}  # 手動実行
-  # 必要なら push トリガーを有効化
+  workflow_dispatch:         # 手動実行
+  # 以下を有効にすれば main への push でも自動実行される
   # push:
   #   branches: [ main ]
 
@@ -32,8 +32,18 @@ jobs:
             /p:TrimUnusedDependencies=true \
             -o publish-output
 
-      - name: Upload artifact
+      - name: Zip output (optional single archive)
+        run: |
+          powershell -Command "Compress-Archive -Path publish-output\\* -DestinationPath ds4windows-x64-selfcontained.zip"
+
+      - name: Upload artifact (folder)
         uses: actions/upload-artifact@v4
         with:
-          name: ds4windows-x64-selfcontained
+          name: ds4windows-x64-selfcontained-folder
           path: publish-output/
+
+      - name: Upload artifact (zip)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ds4windows-x64-selfcontained-zip
+          path: ds4windows-x64-selfcontained.zip
