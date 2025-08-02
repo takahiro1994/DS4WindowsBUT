@@ -1,0 +1,39 @@
+name: Build self-contained x64 single-file
+
+on:
+  workflow_dispatch: {}  # 手動実行
+  # 必要なら push トリガーを有効化
+  # push:
+  #   branches: [ main ]
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Setup .NET SDK
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore DS4Windows/DS4WinWPF.csproj
+
+      - name: Publish self-contained single-file x64
+        run: |
+          dotnet publish DS4Windows/DS4WinWPF.csproj \
+            -c Release \
+            -r win-x64 \
+            --self-contained true \
+            /p:PublishSingleFile=true \
+            /p:TrimUnusedDependencies=true \
+            -o publish-output
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ds4windows-x64-selfcontained
+          path: publish-output/
